@@ -1,0 +1,44 @@
+# Development Dockerfile for Next.js with hot reload
+FROM node:20-alpine AS development
+
+# Install dependencies for building native modules
+RUN apk add --no-cache libc6-compat python3 make g++
+
+# Set working directory
+WORKDIR /app
+
+# Install pnpm globally
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+# Copy package files
+COPY package*.json ./
+COPY pnpm-lock.yaml* ./
+COPY .npmrc* ./
+
+# Install dependencies with cache mount for faster rebuilds
+RUN --mount=type=cache,target=/root/.pnpm-store \
+    pnpm install
+
+# Copy application source
+COPY . .
+
+# Create .next directory with proper permissions
+RUN mkdir -p .next && chown -R node:node .next
+
+# Expose port 3000 for Next.js dev server
+EXPOSE 3000
+
+# Set environment to development
+ENV NODE_ENV=development
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV PORT=3000
+
+# Enable polling for file changes in Docker
+ENV WATCHPACK_POLLING=true
+ENV CHOKIDAR_USEPOLLING=true
+
+# Use non-root user
+USER node
+
+# Start Next.js development server
+CMD ["pnpm", "dev"]

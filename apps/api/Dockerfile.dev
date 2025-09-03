@@ -1,0 +1,51 @@
+# Development Dockerfile for Golang API with Air hot reload
+FROM golang:1.21-alpine AS development
+
+# Install required packages for development
+RUN apk add --no-cache \
+    git \
+    make \
+    gcc \
+    musl-dev \
+    curl \
+    postgresql-client \
+    bash
+
+# Install Air for hot reload (will be installed via go install during runtime if needed)
+# Note: Air can be installed during container startup for faster builds
+
+# Set working directory
+WORKDIR /app
+
+# Copy go mod files
+COPY go.mod go.sum* ./
+
+# Download dependencies with cache
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
+
+# Copy source code
+COPY . .
+
+# Note: Copy libs from monorepo if needed
+# COPY ../../libs /libs
+
+# Create necessary directories
+RUN mkdir -p /app/tmp /app/logs /app/uploads
+
+# Set environment variables for development
+ENV GO111MODULE=on
+ENV CGO_ENABLED=0
+ENV GOOS=linux
+ENV GOARCH=amd64
+ENV GIN_MODE=debug
+
+# Expose ports
+EXPOSE 8080
+EXPOSE 2345
+
+# Install Air during build
+RUN go install github.com/cosmtrek/air@v1.49.0
+
+# Start with hot reload using correct arch path
+CMD ["/go/bin/linux_amd64/air", "-c", ".air.toml"]

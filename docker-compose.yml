@@ -1,0 +1,167 @@
+version: '3.8'
+
+services:
+    # PostgreSQL Database
+    postgres:
+      image: postgres:15-alpine
+      container_name: resumesync-postgres
+      environment:
+        POSTGRES_USER: ${POSTGRES_USER:-resumesync}
+        POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-resumesync123}
+        POSTGRES_DB: ${POSTGRES_DB:-resumesync_db}
+      ports:
+        - "5432:5432"
+      volumes:
+        - postgres_data:/var/lib/postgresql/data
+        - ./docker/postgres:/docker-entrypoint-initdb.d
+      networks:
+        - resumesync-network
+      healthcheck:
+        test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-resumesync}"]
+        interval: 10s
+        timeout: 5s
+        retries: 5
+
+    # Redis Cache
+    redis:
+      image: redis:7-alpine
+      container_name: resumesync-redis
+      command: redis-server --appendonly yes
+      ports:
+        - "6379:6379"
+      volumes:
+        - redis_data:/data
+      networks:
+        - resumesync-network
+      healthcheck:
+        test: ["CMD", "redis-cli", "ping"]
+        interval: 10s
+        timeout: 5s
+        retries: 5
+
+    # MinIO S3-compatible Storage
+    minio:
+      image: minio/minio:latest
+      container_name: resumesync-minio
+      environment:
+        MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+        MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+      command: server /data --console-address ":9001"
+      ports:
+        - "9000:9000"
+        - "9001:9001"
+      volumes:
+        - minio_data:/data
+      networks:
+        - resumesync-network
+      healthcheck:
+        test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+        interval: 10s
+        timeout: 5s
+        retries: 5
+
+    # Golang API
+    api:
+      build:
+        context: ./apps/api
+        dockerfile: Dockerfile.dev
+      container_name: resumesync-api
+      environment:
+        DB_HOST: postgres
+        DB_PORT: 5432
+        DB_USER: ${POSTGRES_USER:-resumesync}
+        DB_PASSWORD: ${POSTGRES_PASSWORD:-resumesync123}
+        DB_NAME: ${POSTGRES_DB:-resumesync_db}
+        REDIS_HOST: redis
+        REDIS_PORT: 6379
+        MINIO_ENDPOINT: minio:9000
+        MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+        MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+        MINIO_USE_SSL: "false"
+        JWT_SECRET: ${JWT_SECRET:-your-secret-key-change-in-production}
+        PORT: 8080
+      ports:
+        - "8080:8080"
+      volumes:
+        - ./apps/api:/app
+        - ./libs:/libs
+        - go_modules:/go/pkg/mod
+      depends_on:
+        postgres:
+          condition: service_healthy
+        redis:
+          condition: service_healthy
+        minio:
+          condition: service_healthy
+      networks:
+        - resumesync-network
+      command: air
+
+    # Background Worker
+    worker:
+      build:
+        context: ./apps/worker
+        dockerfile: Dockerfile.dev
+      container_name: resumesync-worker
+      environment:
+        DB_HOST: postgres
+        DB_PORT: 5432
+        DB_USER: ${POSTGRES_USER:-resumesync}
+        DB_PASSWORD: ${POSTGRES_PASSWORD:-resumesync123}
+        DB_NAME: ${POSTGRES_DB:-resumesync_db}
+        REDIS_HOST: redis
+        REDIS_PORT: 6379
+        MINIO_ENDPOINT: minio:9000
+        MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+        MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+        MINIO_USE_SSL: "false"
+      volumes:
+        - ./apps/worker:/app
+        - ./libs:/libs
+        - go_modules:/go/pkg/mod
+      depends_on:
+        postgres:
+          condition: service_healthy
+        redis:
+          condition: service_healthy
+        minio:
+          condition: service_healthy
+      networks:
+        - resumesync-network
+      command: air
+
+    # Next.js Frontend
+    web:
+      build:
+        context: ./apps/web
+        dockerfile: Dockerfile.dev
+      container_name: resumesync-web
+      environment:
+        NEXT_PUBLIC_API_URL: http://localhost:8080
+        NEXT_PUBLIC_APP_URL: http://localhost:3000
+        DATABASE_URL: postgresql://${POSTGRES_USER:-resumesync}:${POSTGRES_PASSWORD:-resumesync123}@postgres:5432/${POSTGRES_DB:-resumesync_db}
+        NEXTAUTH_URL: http://localhost:3000
+        NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-your-nextauth-secret-change-in-production}
+      ports:
+        - "3000:3000"
+      volumes:
+        - ./apps/web:/app
+        - ./packages:/packages
+        - /app/node_modules
+        - /app/.next
+      depends_on:
+        - api
+      networks:
+        - resumesync-network
+      command: npm run dev
+
+networks:
+  resumesync-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  go_modules:
+
