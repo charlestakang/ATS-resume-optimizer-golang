@@ -1,8 +1,258 @@
-# ATS-resume-optimizer-golang
-an intelligent web application that automatically optimizes user resumes to match specific job descriptions, ensuring maximum ATS compatibility and increasing interview callback rates.
+# ATS Resume Optimizer (ResumeSync Pro)
+
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Go Version](https://img.shields.io/badge/go-%3E%3D1.21-blue)](https://go.dev/)
+[![Next.js](https://img.shields.io/badge/Next.js-14+-black)](https://nextjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue)](https://www.typescriptlang.org/)
+[![Turborepo](https://img.shields.io/badge/Turborepo-latest-red)](https://turbo.build/)
+
+An intelligent web application that automatically optimizes resumes to match job descriptions, ensuring maximum ATS compatibility and increasing interview callback rates.
+
+## 🚀 Features
+
+- **AI-Powered Resume Optimization**: Automatically enhance resumes to match job requirements
+- **ATS Compatibility Scoring**: Real-time scoring against ATS algorithms
+- **Multi-Format Support**: Parse PDF, DOCX, and TXT files
+- **Keyword Optimization**: Intelligent keyword matching and density optimization
+- **Professional Templates**: Export ATS-friendly resume templates
+- **Subscription Management**: Tiered pricing with free and premium features
+- **Real-time Preview**: Side-by-side comparison of original vs optimized resume
+
+## 🏗️ Architecture
+
+This project is built as a **Turborepo monorepo** with the following structure:
+
+- **`apps/web`**: Next.js 14+ frontend with App Router
+- **`apps/api`**: Golang backend using Clean Architecture
+- **`apps/worker`**: Background job processor for document processing
+- **`packages/*`**: Shared frontend packages (UI components, types, configs)
+- **`libs/*`**: Shared backend libraries (auth, database, logging)
+
+## 🛠️ Tech Stack
+
+### Frontend
+- **Framework**: Next.js 14+ with App Router
+- **Language**: TypeScript 5.0+
+- **Styling**: Tailwind CSS + shadcn/ui
+- **State Management**: Zustand
+- **Forms**: React Hook Form + Zod validation
+- **API Client**: Axios with React Query
+
+### Backend
+- **Language**: Go 1.21+
+- **Framework**: Gin Web Framework
+- **ORM**: GORM
+- **Database**: PostgreSQL 15+
+- **Cache**: Redis
+- **Authentication**: JWT + Better Auth
+- **File Storage**: AWS S3 / MinIO
+
+### DevOps
+- **Containerization**: Docker & Docker Compose
+- **Development**: Tilt for hot reload
+- **CI/CD**: GitHub Actions
+- **Monitoring**: Prometheus + Grafana
+
+## 📦 Getting Started
+
+### Prerequisites
+
+- Node.js 18+ and PNPM 8+
+- Go 1.21+
+- Docker and Docker Compose
+- PostgreSQL 15+ (or use Docker)
+- Redis (or use Docker)
+
+### Installation
+
+1. **Clone the repository**
+
+2. **Install dependencies**
+   ```bash
+   # Install all workspace dependencies
+   pnpm install
+   
+   # Install Go dependencies
+   cd apps/api && go mod download
+   cd ../worker && go mod download
+   ```
+
+3. **Set up environment variables**
+   ```bash
+   # Copy example env files
+   cp .env.example .env
+   cp apps/web/.env.example apps/web/.env.local
+   cp apps/api/.env.example apps/api/.env
+   cp apps/worker/.env.example apps/worker/.env
+   ```
+
+4. **Start Docker services**
+   ```bash
+   docker-compose -f docker-compose.dev.yml up -d postgres redis minio
+   ```
+
+5. **Run database migrations**
+   ```bash
+   cd apps/api
+   go run cmd/migrate/main.go up
+5. **Run database migrations**
+   
+   # Or manually
+   pnpm dev  # Starts all apps in dev mode
+   ```
+
+### Development Workflow
+
+```bash
+# Run all apps in development
+pnpm dev
+
+# Run specific app
+pnpm dev --filter=web
+pnpm dev --filter=api
+
+# Build all apps
+pnpm build
+
+# Run tests
+pnpm test
+
+# Lint and format
+pnpm lint
+pnpm format
+
+# Type checking
+pnpm type-check
+```
+
+## 📁 Project Structure
+
+```
+resumesync-pro/
+├── apps/
+│   ├── web/                 # Next.js frontend
+│   ├── api/                 # Golang API server
+│   └── worker/              # Background job processor
+├── packages/
+│   ├── ui/                  # Shared React components
+│   ├── shared-types/        # TypeScript type definitions
+│   └── config/              # Shared configurations
+├── libs/
+│   ├── auth/                # Authentication library
+│   ├── database/            # Database utilities
+│   ├── logger/              # Logging utilities
+│   └── fileprocessor/       # Document processing
+├── docker/                  # Docker configurations
+├── scripts/                 # Build and utility scripts
+└── docs/                    # Documentation
+```
+
+## 🔧 Configuration
+
+### Environment Variables
+
+Key environment variables needed:
+
+```env
+# Database
+DATABASE_URL=postgresql://user:pass@localhost:5432/resumesync
+
+# Redis
+REDIS_URL=redis://localhost:6379
+
+# JWT
+JWT_SECRET=your-secret-key
+JWT_EXPIRY=24h
+
+# Storage
+STORAGE_TYPE=s3|minio|local
+S3_BUCKET=resumesync-uploads
+S3_REGION=us-east-1
+
+# API URLs
+NEXT_PUBLIC_API_URL=http://localhost:8080
+NEXT_PUBLIC_WS_URL=ws://localhost:8080
+```
+
+## 🧪 Testing
+
+```bash
+# Run all tests
+pnpm test
+
+# Run frontend tests
+pnpm test:web
+
+# Run backend tests
+cd apps/api && go test ./...
+
+# Run e2e tests
+pnpm test:e2e
+
+# Coverage reports
+pnpm test:coverage
+```
+
+## 📊 API Documentation
+
+API documentation is available at:
+- Development: http://localhost:8080/swagger
+- Production: https://api.resumesync.pro/swagger
+
+Key endpoints:
+- `POST /api/v1/auth/register` - User registration
+- `POST /api/v1/auth/login` - User login
+- `POST /api/v1/resume/upload` - Upload resume
+- `POST /api/v1/resume/optimize` - Optimize resume
+- `GET /api/v1/job/parse` - Parse job description
+
+## 🚢 Deployment
+
+### Docker Deployment
+
+```bash
+# Build production images
+docker-compose build
+
+# Run production stack
+docker-compose up -d
+```
+
+### Kubernetes Deployment
+
+```bash
+# Apply k8s manifests
+kubectl apply -f k8s/
+
+# Or use Helm
+helm install resumesync ./charts/resumesync
+```
+
+## 🤝 Contributing
+
+Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduct and the process for submitting pull requests.
+
+### Development Guidelines
+
+1. Follow Clean Architecture principles for backend code
+2. Use conventional commits for commit messages
+3. Write tests for new features
+4. Update documentation as needed
+5. Ensure all CI checks pass before merging
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- [shadcn/ui](https://ui.shadcn.com/) for the component library pattern
+- [Turborepo](https://turbo.build/) for the monorepo tooling
+- [Clean Architecture](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html) principles by Robert C. Martin
+
+---
 
 # Product Requirements Document (PRD)
-## ATS Resume Optimizer Web Application
 
 ### 1. Product Overview
 
