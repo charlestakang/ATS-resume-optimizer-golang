@@ -27,7 +27,7 @@ COPY . .
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-    go build -ldflags="-w -s -X main.Version=$(git describe --tags --always --dirty) -X main.BuildTime=$(date -u +%Y-%m-%d_%H:%M:%S)" \
+    go build -ldflags="-w -s -X main.Version=$(git describe --tags --always --dirty 2>/dev/null || echo 'unknown') -X main.BuildTime=$(date -u +%Y-%m-%d_%H:%M:%S 2>/dev/null || echo 'unknown')" \
     -a -installsuffix cgo -o worker ./cmd/worker
 
 # Final stage: minimal runtime image

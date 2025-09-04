@@ -48,4 +48,4 @@ EXPOSE 2345
 RUN go install github.com/cosmtrek/air@v1.49.0
 
 # Start with hot reload using correct arch path
-CMD ["/go/bin/linux_amd64/air", "-c", ".air.toml"]
+CMD ["air", "-c", ".air.toml"]

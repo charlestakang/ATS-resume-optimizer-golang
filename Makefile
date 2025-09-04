@@ -114,7 +114,7 @@ db-reset: ## Reset database (drop, create, migrate, seed)
 db-backup: ## Backup database
 	@echo "💾 Backing up database..."
 	@mkdir -p backups
-	@docker-compose exec postgres pg_dump -U resumesync resumesync_dev > backups/backup_$(shell date +%Y%m%d_%H%M%S).sql
+	@docker-compose exec -T postgres pg_dump -U resumesync resumesync_dev > backups/backup_$(shell date +%Y%m%d_%H%M%S).sql
 	@echo "✅ Database backed up to backups/"
 
 .PHONY: redis-cli
@@ -234,7 +234,7 @@ env: ## Copy .env.example to .env
 .PHONY: minio-setup
 minio-setup: ## Setup MinIO buckets
 	@echo "🪣 Setting up MinIO buckets..."
-	@docker-compose exec minio mc alias set local http://localhost:9000 minioadmin minioadmin123
+	@docker-compose exec minio mc alias set local http://localhost:9000 $(MINIO_ROOT_USER) $(MINIO_ROOT_PASSWORD)
 	@docker-compose exec minio mc mb local/resumesync-uploads --ignore-existing
 	@docker-compose exec minio mc mb local/resumesync-exports --ignore-existing
 	@docker-compose exec minio mc mb local/resumesync-temp --ignore-existing

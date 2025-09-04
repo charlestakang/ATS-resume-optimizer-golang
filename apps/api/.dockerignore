@@ -58,5 +58,4 @@ docker-compose*
 logs/
 
 # Development tools
-.air.toml
 Makefile
