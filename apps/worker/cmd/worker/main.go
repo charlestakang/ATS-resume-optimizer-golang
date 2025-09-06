@@ -1,18 +1,24 @@
 package main
 
 import (
-	"context"
-	"fmt"
-	"log"
-	"os"
-	"os/signal"
-	"sync"
-	"syscall"
-	"time"
+    "context"
+    "fmt"
+    "log"
+    "os"
+    "os/signal"
+    "sync"
+    "syscall"
+    "time"
+)
+
+// These are set via -ldflags during build
+var (
+    Version   string
+    BuildTime string
 )
 
 func main() {
-	log.Println("Worker starting...")
+    log.Printf("Worker starting... (version=%s build=%s)", Version, BuildTime)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -47,7 +53,7 @@ func main() {
 	log.Println("Worker shutting down... sending cancel to goroutines")
 	cancel()
 
-	// Wait for goroutines to finish
-	wg.Wait()
-	fmt.Println("Worker shutdown complete")
+    // Wait for goroutines to finish
+    wg.Wait()
+    fmt.Println("Worker shutdown complete")
 }

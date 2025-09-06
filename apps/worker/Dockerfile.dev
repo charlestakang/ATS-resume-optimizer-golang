@@ -41,7 +41,8 @@ ENV WORKER_ENV=development
 
 # Install Air during build and ensure Go bin directory is in PATH
 RUN go install github.com/cosmtrek/air@v1.49.0
-ENV PATH="/go/bin/linux_amd64:${PATH}"
+# Ensure standard GOPATH bin is on PATH
+ENV PATH="/go/bin:${PATH}"
 
 # Start with hot reload using architecture-agnostic path (air should be on PATH)
-CMD ["/go/bin/linux_amd64/air", "-c", ".air.toml"]
+CMD ["air", "-c", ".air.toml"]

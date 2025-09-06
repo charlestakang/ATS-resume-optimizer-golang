@@ -40,3 +40,9 @@ node_modules/
 # Production
 build/
 dist/
+
+# Go/Air temp and logs
+tmp/
+**/tmp/
+**/*.log
+apps/*/logs/

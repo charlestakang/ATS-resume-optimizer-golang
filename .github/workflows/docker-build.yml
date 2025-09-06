@@ -165,7 +165,7 @@ jobs:
             GIT_AUTH_TOKEN=${{ secrets.GITHUB_TOKEN }}
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0
         with:
           image-ref: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}:${{ needs.prepare-matrix.outputs.image-tag }}
           format: 'sarif'

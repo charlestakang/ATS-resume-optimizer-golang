@@ -62,7 +62,7 @@ services:
         - go_dev_modules:/go/pkg/mod
         - ./apps/api/tmp:/tmp
       working_dir: /app
-      command: /go/bin/linux_amd64/air -c .air.toml
+      command: air -c .air.toml
       stdin_open: true
       tty: true
 
@@ -92,7 +92,7 @@ services:
         - go_dev_modules:/go/pkg/mod
         - ./apps/worker/tmp:/tmp
       working_dir: /app
-      command: /go/bin/linux_amd64/air -c .air.toml
+      command: air -c .air.toml
       stdin_open: true
       tty: true
 

@@ -1,66 +1,66 @@
 # Binaries
-  *.exe
-  *.exe~
-  *.dll
-  *.so
-  *.dylib
-  worker
-  bin/
-  dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+worker
+bin/
+dist/
 
-  # Test files
-  *.test
-  *.out
-  coverage.*
-  *.coverprofile
+# Test files
+*.test
+*.out
+coverage.*
+*.coverprofile
 
-  # Go workspace
-  go.work
-  go.work.sum
+# Go workspace
+go.work
+go.work.sum
 
-  # Vendor directory
-  vendor/
+# Vendor directory
+vendor/
 
-  # Air tmp directory
-  tmp/
+# Air tmp directory
+tmp/
 
-  # Processing directories
-  processing/
-  exports/
+# Processing directories
+processing/
+exports/
 
-  # Environment files
-  .env
-  .env.*
+# Environment files
+.env
+.env.*
 
-  # IDE files
-  .vscode/
-  .idea/
-  *.swp
-  *.swo
-  *~
-  .DS_Store
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
 
-  # Git
-  .git/
-  .gitignore
+# Git
+.git/
+.gitignore
 
-  # Documentation
-  README.md
-  docs/
+# Documentation
+README.md
+docs/
 
-  # Docker
-  Dockerfile*
-  docker-compose*
-  .dockerignore
+# Docker
+Dockerfile*
+docker-compose*
+.dockerignore
 
-  # CI/CD
-  .github/
-  .gitlab-ci.yml
+# CI/CD
+.github/
+.gitlab-ci.yml
 
-  # Logs
-  *.log
-  logs/
+# Logs
+*.log
+logs/
 
-  # Development tools
-  .air.toml
-  Makefile
+# Development tools
+.air.toml
+Makefile

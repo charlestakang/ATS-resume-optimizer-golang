@@ -186,7 +186,7 @@ linters-settings:
   
   # Go imports
   goimports:
-    local-prefixes: github.com/yourusername/resumesync
+    local-prefixes: github.com/charlestakang/resumesync-pro
   
   # Golint
   revive:
