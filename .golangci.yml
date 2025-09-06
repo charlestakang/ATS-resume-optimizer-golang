@@ -1,0 +1,770 @@
+# GolangCI-Lint configuration for ResumeSync Pro
+# https://golangci-lint.run/usage/configuration/
+
+# ============================================
+# Run Configuration
+# ============================================
+run:
+  # Timeout for analysis (default is 1m)
+  timeout: 5m
+  
+  # Exit code when at least one issue was found (default is 1)
+  issues-exit-code: 1
+  
+  # Include test files (default is true)
+  tests: true
+  
+  # Build tags to use during analysis
+  build-tags:
+    - integration
+    - unit
+    - e2e
+  
+  # Which directories to skip
+  skip-dirs:
+    - vendor
+    - third_party
+    - testdata
+    - examples
+    - docs
+    - scripts
+    - .github
+    - k8s
+    - terraform
+    - charts
+    - tmp
+    - dist
+    - build
+    - node_modules
+  
+  # Which files to skip
+  skip-files:
+    - ".*\\.pb\\.go$"
+    - ".*\\.gen\\.go$"
+    - "mock_.*\\.go$"
+    - ".*_mock\\.go$"
+  
+  # By default, list of stable checks is used
+  modules-download-mode: readonly
+  
+  # Allow multiple parallel golangci-lint instances
+  allow-parallel-runners: true
+  
+  # Go version to use
+  go: "1.21"
+
+# ============================================
+# Output Configuration
+# ============================================
+output:
+  # Format of output: colored-line-number|line-number|json|tab|checkstyle|code-climate|junit-xml|github-actions
+  format: colored-line-number
+  
+  # Print lines of code with issue (default is true)
+  print-issued-lines: true
+  
+  # Print linter name in the end of issue text (default is true)
+  print-linter-name: true
+  
+  # Make issues output unique by line (default is true)
+  uniq-by-line: true
+  
+  # Add a prefix to the output file references
+  path-prefix: ""
+  
+  # Sort results by: filepath|line|column
+  sort-results: true
+
+# ============================================
+# Linter Settings
+# ============================================
+linters-settings:
+  # Cyclomatic complexity check
+  cyclop:
+    max-complexity: 15
+    package-average: 10.0
+    skip-tests: false
+
+  # Duplicate code detection
+  dupl:
+    threshold: 100
+  
+  # Error check
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+    disable-default-exclusions: false
+    exclude-functions:
+      - io.Copy(*bytes.Buffer)
+      - io.Copy(os.Stdout)
+      - fmt.Print
+      - fmt.Printf
+      - fmt.Println
+      - fmt.Fprint
+  
+  # Error lint
+  errorlint:
+    errorf: true
+    asserts: true
+    comparison: true
+  
+  # Exhaustive checks
+  exhaustive:
+    check-generated: false
+    default-signifies-exhaustive: true
+  
+  # Function line length
+  funlen:
+    lines: 100
+    statements: 60
+  
+  # Gocognit complexity
+  gocognit:
+    min-complexity: 20
+  
+  # Goconst - repeated string detection
+  goconst:
+    min-len: 3
+    min-occurrences: 3
+    ignore-tests: false
+    match-constant: true
+    numbers: true
+    min: 2
+    max: 3
+  
+  # Gocritic linter
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - experimental
+      - opinionated
+      - performance
+      - style
+    disabled-checks:
+      - dupImport # https://github.com/go-critic/go-critic/issues/845
+      - ifElseChain
+      - octalLiteral
+      - whyNoLint
+      - wrapperFunc
+      - hugeParam # Can be noisy for legitimate large structs
+      - rangeValCopy # Can be noisy
+      - unnamedResult # Can reduce clarity in some cases
+    settings:
+      captLocal:
+        paramsOnly: false
+      elseif:
+        skipBalanced: true
+      hugeParam:
+        sizeThreshold: 500
+      nestingReduce:
+        bodyWidth: 3
+      rangeExprCopy:
+        sizeThreshold: 512
+        skipTestFuncs: true
+      rangeValCopy:
+        sizeThreshold: 256
+        skipTestFuncs: true
+      truncateCmp:
+        skipArchDependent: true
+      underef:
+        skipRecvDeref: true
+      unnamedResult:
+        checkExported: true
+  
+  # Gocyclo - cyclomatic complexity
+  gocyclo:
+    min-complexity: 15
+  
+  # Go fmt
+  gofmt:
+    simplify: true
+    rewrite-rules:
+      - pattern: 'interface{}'
+        replacement: 'any'
+      - pattern: 'a[b:len(a)]'
+        replacement: 'a[b:]'
+  
+  # Go imports
+  goimports:
+    local-prefixes: github.com/yourusername/resumesync
+  
+  # Golint
+  revive:
+    confidence: 0.8
+    severity: warning
+    enable-all-rules: false
+    rules:
+      - name: blank-imports
+      - name: context-as-argument
+      - name: context-keys-type
+      - name: dot-imports
+      - name: error-return
+      - name: error-strings
+      - name: error-naming
+      - name: exported
+      - name: increment-decrement
+      - name: var-naming
+      - name: var-declaration
+      - name: package-comments
+      - name: range
+      - name: receiver-naming
+      - name: time-naming
+      - name: unexported-return
+      - name: indent-error-flow
+      - name: errorf
+      - name: empty-block
+      - name: superfluous-else
+      - name: unused-parameter
+      - name: unreachable-code
+      - name: redefines-builtin-id
+      - name: waitgroup-by-value
+      - name: unconditional-recursion
+      - name: struct-tag
+      - name: string-format
+      - name: string-of-int
+      - name: range-val-address
+      - name: range-val-in-closure
+      - name: modifies-value-receiver
+      - name: modifies-parameter
+      - name: identical-branches
+      - name: get-return
+      - name: flag-parameter
+      - name: early-return
+      - name: defer
+      - name: constant-logical-expr
+      - name: confusing-naming
+      - name: confusing-results
+      - name: bool-literal-in-expr
+      - name: atomic
+  
+  # Gomnd - magic numbers detection
+  gomnd:
+    settings:
+      mnd:
+        checks:
+          - argument
+          - case
+          - condition
+          - operation
+          - return
+          - assign
+        ignored-numbers:
+          - '0'
+          - '1'
+          - '2'
+          - '10'
+          - '100'
+          - '1000'
+        ignored-files:
+          - 'test\\.go$'
+        ignored-functions:
+          - 'strconv\\.Parse.*'
+          - 'strconv\\.Format.*'
+          - 'math\\..*'
+          - 'http\\.StatusText'
+  
+  # Go module
+  gomodguard:
+    allowed:
+      modules:
+        - github.com/gin-gonic/gin
+        - github.com/stretchr/testify
+        - github.com/go-redis/redis/v8
+        - gorm.io/gorm
+        - gorm.io/driver/postgres
+        - github.com/golang-jwt/jwt/v5
+        - github.com/google/uuid
+        - github.com/minio/minio-go/v7
+        - github.com/prometheus/client_golang
+        - go.uber.org/zap
+        - golang.org/x/crypto
+        - golang.org/x/sync
+        - golang.org/x/text
+      domains:
+        - golang.org
+        - google.golang.org
+        - gopkg.in
+    blocked:
+      modules:
+        - github.com/pkg/errors:
+            recommendations:
+              - errors
+              - fmt
+            reason: "Use standard library errors package with Go 1.13+ error wrapping"
+        - github.com/gofrs/uuid:
+            recommendations:
+              - github.com/google/uuid
+            reason: "Use github.com/google/uuid instead"
+  
+  # Gosec - security checks
+  gosec:
+    severity: medium
+    confidence: medium
+    excludes:
+      - G101 # Look for hard coded credentials
+      - G114 # Use of net/http serve functions that have no support for setting timeouts
+    config:
+      G101:
+        pattern: "(?i)passwd|pass|password|pwd|secret|token|apikey|api_key|access_key|secret_key|private_key"
+        ignore_entropy: false
+        entropy_threshold: "80"
+        per_char_threshold: "3.0"
+        truncate: "32"
+      G104:
+        fmt:
+          - Fprintf
+          - Printf
+          - Sprintf
+          - Fprint
+          - Print
+          - Sprint
+      G301: "0750"
+      G302: "0600"
+      G306: "0600"
+  
+  # Go simple
+  gosimple:
+    go: "1.21"
+    checks:
+      - "all"
+  
+  # Go vet
+  govet:
+    check-shadowing: true
+    enable-all: true
+    disable:
+      - fieldalignment # Can be noisy and not always worth optimizing
+    settings:
+      printf:
+        funcs:
+          - (github.com/golangci/golangci-lint/pkg/logutils.Log).Infof
+          - (github.com/golangci/golangci-lint/pkg/logutils.Log).Warnf
+          - (github.com/golangci/golangci-lint/pkg/logutils.Log).Errorf
+          - (github.com/golangci/golangci-lint/pkg/logutils.Log).Fatalf
+      shadow:
+        strict: false
+  
+  # Ineffassign
+  ineffassign:
+    detect-whole-file: true
+  
+  # Line length
+  lll:
+    line-length: 120
+    tab-width: 4
+  
+  # Misspell
+  misspell:
+    locale: US
+    ignore-words:
+      - cancelled
+      - cancelling
+  
+  # Nakedret - naked returns
+  nakedret:
+    max-func-lines: 30
+  
+  # Nestif - nested if statements
+  nestif:
+    min-complexity: 6
+  
+  # Noctx - http requests without context
+  noctx:
+    enable: true
+  
+  # Nolintlint
+  nolintlint:
+    allow-leading-space: false
+    allow-unused: false
+    require-explanation: true
+    require-specific: true
+  
+  # Prealloc - slice preallocation
+  prealloc:
+    simple: true
+    range-loops: true
+    for-loops: true
+  
+  # Promlinter - Prometheus metrics naming
+  promlinter:
+    strict: false
+    disabled-linters:
+      - Help
+      - MetricUnits
+      - Counter
+      - HistogramSummaryReserved
+      - MetricTypeInName
+      - ReservedChars
+      - CamelCase
+      - lintUnitAbbreviations
+  
+  # Rowserrcheck - sql.Rows err check
+  rowserrcheck:
+    packages:
+      - database/sql
+      - github.com/jmoiron/sqlx
+      - gorm.io/gorm
+  
+  # Staticcheck
+  staticcheck:
+    go: "1.21"
+    checks:
+      - "all"
+      - "-ST1000" # Incorrect or missing package comment
+      - "-ST1003" # Poorly chosen identifier (can be opinionated)
+  
+  # Stylecheck
+  stylecheck:
+    go: "1.21"
+    checks:
+      - "all"
+      - "-ST1000" # Incorrect or missing package comment
+      - "-ST1003" # Poorly chosen identifier
+    dot-import-whitelist:
+      - github.com/onsi/ginkgo/v2
+      - github.com/onsi/gomega
+    http-status-code-whitelist:
+      - "200"
+      - "400"
+      - "404"
+      - "500"
+  
+  # Tenv - testing.T.Setenv instead of os.Setenv
+  tenv:
+    all: true
+  
+  # Testpackage - test package naming
+  testpackage:
+    skip-regexp: (export|internal)_test\\.go
+  
+  # Thelper - test helper function
+  thelper:
+    test:
+      first: true
+      name: true
+      begin: true
+    benchmark:
+      first: true
+      name: true
+      begin: true
+    tb:
+      first: true
+      name: true
+      begin: true
+  
+  # Unparam - unused parameters
+  unparam:
+    check-exported: true
+  
+  # Unused
+  unused:
+    go: "1.21"
+  
+  # Varnamelen - variable name length
+  varnamelen:
+    max-distance: 5
+    min-name-length: 3
+    check-receiver: true
+    check-return: true
+    check-type-param: true
+    ignore-type-assert-ok: true
+    ignore-map-index-ok: true
+    ignore-chan-recv-ok: true
+    ignore-names:
+      - err
+      - ok
+      - id
+      - db
+      - tx
+      - i
+      - j
+      - k
+      - n
+      - m
+      - v
+      - w
+      - rw
+      - r
+      - c
+      - cc
+      - ss
+      - ws
+      - fs
+      - fn
+      - mu
+      - vm
+    ignore-decls:
+      - t testing.T
+      - b testing.B
+      - tb testing.TB
+      - m map[string]int
+      - w http.ResponseWriter
+      - r *http.Request
+      - c *gin.Context
+  
+  # Whitespace
+  whitespace:
+    multi-if: true
+    multi-func: true
+  
+  # WSL - whitespace linter
+  wsl:
+    strict-append: true
+    allow-assign-and-call: true
+    allow-multiline-assign: true
+    allow-cuddle-declarations: false
+    allow-trailing-comment: false
+    force-case-trailing-whitespace: 0
+    force-err-cuddling: false
+    allow-separated-leading-comment: false
+  
+  # Wrapcheck - check errors from external packages
+  wrapcheck:
+    ignoreSigs:
+      - .Errorf(
+      - errors.New(
+      - errors.Unwrap(
+      - .Wrap(
+      - .Wrapf(
+      - .WithMessage(
+      - .WithMessagef(
+      - .WithStack(
+    ignoreSigRegexps:
+      - \\.New.*Error\\(
+    ignorePackageGlobs:
+      - encoding/*
+      - github.com/pkg/*
+      - github.com/yourusername/resumesync/*
+
+# ============================================
+# Linters Configuration
+# ============================================
+linters:
+  # Disable all linters
+  disable-all: true
+  
+  # Enable specific linters
+  enable:
+    # Default linters
+    - errcheck      # Checking for unchecked errors
+    - gosimple      # Simplifying code
+    - govet         # Vet examines Go source code
+    - ineffassign   # Detects ineffectual assignments
+    - staticcheck   # Static analysis
+    - typecheck     # Type checking
+    - unused        # Checks for unused code
+    
+    # Additional linters for code quality
+    - bodyclose     # Checks HTTP response body is closed
+    - contextcheck  # Check context.Context is used correctly
+    - cyclop        # Cyclomatic complexity
+    - dupl          # Code duplication
+    - durationcheck # Check for two durations multiplied together
+    - errorlint     # Error wrapping checks
+    - exhaustive    # Check exhaustiveness of enum switch statements
+    - exportloopref # Checks for pointers to enclosing loop variables
+    - funlen        # Function length
+    - gochecknoinits # Checks that no init functions are present
+    - gocognit      # Cognitive complexity
+    - goconst       # Find repeated strings
+    - gocritic      # Various checks
+    - gocyclo       # Cyclomatic complexity
+    - gofmt         # Gofmt checks
+    - goimports     # Import ordering
+    - gomnd         # Magic numbers
+    - gomodguard    # Allow and block list of go modules
+    - goprintffuncname # Checks that printf-like functions are named with `f`
+    - gosec         # Security checks
+    - lll           # Line length limit
+    - makezero      # Finds slice declarations with non-zero initial length
+    - misspell      # Spell checker
+    - nakedret      # Naked returns
+    - nestif        # Nested if statements
+    - nilerr        # Find code returning nil even if check for error
+    - nilnil        # Checks that there is no return of `nil` error and nil value
+    - noctx         # Noctx finds http requests without context.Context
+    - nolintlint    # Reports ill-formed or insufficient nolint directives
+    - prealloc      # Find slice declarations that could potentially be preallocated
+    - predeclared   # Find code shadowing predeclared identifiers
+    - promlinter    # Check Prometheus metrics naming
+    - revive        # Fast, configurable, extensible, flexible linter
+    - rowserrcheck  # Checks whether Err of rows is checked
+    - sqlclosecheck # Checks that sql.Rows and sql.Stmt are closed
+    - stylecheck    # Stylecheck is a replacement for golint
+    - tenv          # Detects using os.Setenv instead of t.Setenv
+    - testpackage   # Makes you use a separate _test package
+    - thelper       # Detects test helpers without t.Helper()
+    - tparallel     # Detects inappropriate usage of t.Parallel()
+    - unconvert     # Remove unnecessary type conversions
+    - unparam       # Reports unused function parameters
+    - varnamelen    # Checks that the length of a variable's name matches its scope
+    - wastedassign  # Finds wasted assignment statements
+    - whitespace    # Detection of leading and trailing whitespace
+    
+  # Run only fast linters from enabled linters set
+  fast: false
+
+# ============================================
+# Issues Configuration
+# ============================================
+issues:
+  # List of regexps of issue texts to exclude
+  exclude:
+    - "Error return value of .((os\\.)?std(out|err)\\..*|.*Close|.*Flush|os\\.Remove(All)?|.*print(f|ln)?|os\\.(Un)?Setenv). is not checked"
+    - "exported (type|method|function) (.+) should have comment or be unexported"
+    - "ST1000: at least one file in a package should have a package comment"
+    - "should have a package comment, unless it's in another file for this package"
+  
+  # Excluding configuration per-path, per-linter, per-text and per-source
+  exclude-rules:
+    # Exclude some linters from running on tests files
+    - path: _test\\.go
+      linters:
+        - gocyclo
+        - errcheck
+        - dupl
+        - gosec
+        - funlen
+        - gocognit
+        - nestif
+        - gomnd
+        - lll
+    
+    # Exclude known linters from partially hard-vendored code
+    - path: internal/pkg
+      linters:
+        - gocyclo
+        - errcheck
+        - dupl
+        - gosec
+    
+    # Exclude some static checks on generated files
+    - path: \\.pb\\.go
+      linters:
+        - gosimple
+        - errcheck
+        - staticcheck
+        - unused
+        - govet
+    
+    # Exclude lll issues for long lines with go:generate
+    - linters:
+        - lll
+      source: "^//go:generate "
+    
+    # Exclude certain checks in main packages
+    - path: cmd/.*/main\\.go
+      linters:
+        - gochecknoinits
+        - gochecknoglobals
+    
+    # Allow magic numbers in table-driven tests
+    - path: _test\\.go
+      text: "mnd: Magic number"
+      linters:
+        - gomnd
+    
+    # Allow long functions in migration files
+    - path: migrations/
+      linters:
+        - funlen
+        - gocognit
+        - gocyclo
+    
+    # Allow dot imports in test files for testing libraries
+    - path: _test\\.go
+      text: "should not use dot imports"
+      linters:
+        - revive
+        - stylecheck
+    
+    # Allow unused parameters in interfaces and mocks
+    - path: (mock_.*\\.go|.*_mock\\.go)
+      linters:
+        - unparam
+        - unused
+        - varnamelen
+    
+    # Ignore missing comments on exported items in internal packages
+    - path: internal/
+      text: "exported (type|method|function)"
+      linters:
+        - revive
+        - stylecheck
+  
+  # Independently from option `exclude` we use default exclude patterns
+  exclude-use-default: false
+  
+  # If set to true exclude and exclude-rules regular expressions become case sensitive
+  exclude-case-sensitive: false
+  
+  # Maximum issues count per one linter
+  max-issues-per-linter: 50
+  
+  # Maximum count of issues with the same text
+  max-same-issues: 3
+  
+  # Fix found issues (if it's supported by the linter)
+  fix: false
+  
+  # Show only new issues created after git revision
+  new: false
+  
+  # Show only new issues created in git patch with set file path
+  new-from-patch: ""
+  
+  # Show only new issues created after git revision
+  new-from-rev: ""
+  
+  # Default value is empty string.
+  # Set the default severity for issues. If severity rules are defined and the issues
+  # do not match or no severity is provided to the rule this will be the default
+  # severity applied.
+  default-severity: warning
+  
+  # The default value is false.
+  # If set to true severity-rules regular expressions become case sensitive.
+  severity-case-sensitive: false
+  
+  # Default value is empty list.
+  # When a list of severity rules are provided, severity information will be added to lint
+  # issues. Severity rules have the same filtering capability as exclude rules except you
+  # are allowed to specify one matcher per severity rule.
+  severity-rules:
+    - linters:
+        - gosec
+      severity: error
+    - linters:
+        - dupl
+      severity: info
+    - linters:
+        - gomnd
+        - goconst
+        - funlen
+        - gocognit
+        - gocyclo
+      severity: info
+
+# ============================================
+# Service-Specific Configurations
+# ============================================
+# Note: When running golangci-lint for specific services,
+# you can override settings using command-line flags:
+#
+# For API service:
+# golangci-lint run --config=.golangci.yml ./apps/api/...
+#
+# For Worker service:
+# golangci-lint run --config=.golangci.yml ./apps/worker/...
+#
+# For Libraries:
+# golangci-lint run --config=.golangci.yml ./libs/...
+#
+# For running with different timeout:
+# golangci-lint run --timeout=10m
+#
+# For running only fast linters:
+# golangci-lint run --fast
+#
+# For fixing auto-fixable issues:
+# golangci-lint run --fix

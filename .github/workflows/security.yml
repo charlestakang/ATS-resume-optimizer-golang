@@ -1,0 +1,439 @@
+name: Security Scanning
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # Run security scans daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      scan_type:
+        description: 'Type of security scan to run'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - codeql
+          - dependencies
+          - secrets
+          - container
+
+env:
+  GO_VERSION: '1.21'
+  NODE_VERSION: '20'
+  TRIVY_VERSION: '0.46.0'
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  # ============================================
+  # CodeQL Analysis
+  # ============================================
+  codeql-analysis:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    if: github.event.inputs.scan_type == 'all' || github.event.inputs.scan_type == 'codeql' || github.event.inputs.scan_type == ''
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [ 'go', 'javascript' ]
+        include:
+          - language: go
+            build-mode: manual
+            working-directory: ./apps/api
+          - language: javascript
+            build-mode: none
+            working-directory: ./apps/web
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-extended,security-and-quality
+          
+      - name: Set up Go
+        if: matrix.language == 'go'
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+          cache-dependency-path: |
+            apps/api/go.sum
+            apps/worker/go.sum
+
+      - name: Build Go code
+        if: matrix.language == 'go'
+        run: |
+          echo "Building API..."
+          cd apps/api && go build -v ./...
+          echo "Building Worker..."
+          cd ../worker && go build -v ./...
+
+      - name: Set up Node.js
+        if: matrix.language == 'javascript'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install JavaScript dependencies
+        if: matrix.language == 'javascript'
+        working-directory: apps/web
+        run: |
+          npm ci --prefer-offline --no-audit
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{matrix.language}}"
+
+  # ============================================
+  # Dependency Scanning
+  # ============================================
+  dependency-scan:
+    name: Dependency Vulnerability Scan
+    runs-on: ubuntu-latest
+    if: github.event.inputs.scan_type == 'all' || github.event.inputs.scan_type == 'dependencies' || github.event.inputs.scan_type == ''
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+          cache-dependency-path: |
+            apps/api/go.sum
+            apps/worker/go.sum
+
+      - name: Run Go vulnerability check - API
+        working-directory: apps/api
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./... || true
+
+      - name: Run Go vulnerability check - Worker
+        working-directory: apps/worker
+        run: |
+          govulncheck ./... || true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Run npm audit
+        working-directory: apps/web
+        run: |
+          npm audit --production || true
+          npm audit --json > npm-audit.json || true
+
+      - name: Upload npm audit results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-audit-results
+          path: apps/web/npm-audit.json
+
+      - name: Run Snyk Security Scan
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: snyk/actions/node@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high --all-projects
+
+  # ============================================
+  # Container Security Scanning
+  # ============================================
+  container-scan:
+    name: Container Security Scan
+    runs-on: ubuntu-latest
+    if: github.event.inputs.scan_type == 'all' || github.event.inputs.scan_type == 'container' || github.event.inputs.scan_type == ''
+    strategy:
+      matrix:
+        service: [api, worker, web]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./apps/${{ matrix.service }}
+          file: ./apps/${{ matrix.service }}/Dockerfile
+          push: false
+          tags: resumesync-${{ matrix.service }}:security-scan
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: resumesync-${{ matrix.service }}:security-scan
+          format: 'sarif'
+          output: 'trivy-${{ matrix.service }}.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+          vuln-type: 'os,library'
+          ignore-unfixed: true
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-${{ matrix.service }}.sarif'
+          category: 'trivy-${{ matrix.service }}'
+
+      - name: Run Trivy in table format
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: resumesync-${{ matrix.service }}:security-scan
+          format: 'table'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+          vuln-type: 'os,library'
+          exit-code: '0'
+
+  # ============================================
+  # Secret Scanning
+  # ============================================
+  secret-scan:
+    name: Secret Detection
+    runs-on: ubuntu-latest
+    if: github.event.inputs.scan_type == 'all' || github.event.inputs.scan_type == 'secrets' || github.event.inputs.scan_type == ''
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Run TruffleHog
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+          extra_args: --debug --json
+        continue-on-error: true
+
+  # ============================================
+  # SAST (Static Application Security Testing)
+  # ============================================
+  sast-scan:
+    name: SAST Analysis
+    runs-on: ubuntu-latest
+    if: github.event.inputs.scan_type == 'all' || github.event.inputs.scan_type == ''
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+          cache-dependency-path: |
+            apps/api/go.sum
+            apps/worker/go.sum
+
+      - name: Run Gosec Security Scanner
+        uses: securego/gosec@master
+        with:
+          args: '-fmt sarif -out gosec-results.sarif -severity medium ./apps/...'
+        continue-on-error: true
+
+      - name: Upload Gosec results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: gosec-results.sarif
+          category: 'gosec'
+
+      - name: Run Semgrep
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: >-
+            p/security-audit
+            p/golang
+            p/javascript
+            p/typescript
+            p/react
+            p/nextjs
+            p/docker
+            p/kubernetes
+          generateSarif: true
+        continue-on-error: true
+
+      - name: Upload Semgrep results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: semgrep.sarif
+          category: 'semgrep'
+
+  # ============================================
+  # License Scanning
+  # ============================================
+  license-scan:
+    name: License Compliance Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Check Go licenses
+        run: |
+          go install github.com/google/go-licenses@latest
+          echo "Checking API licenses..."
+          cd apps/api && go-licenses check ./... || true
+          echo "Checking Worker licenses..."
+          cd ../worker && go-licenses check ./... || true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Check npm licenses
+        working-directory: apps/web
+        run: |
+          npx license-checker --production --summary || true
+          npx license-checker --production --onlyAllow 'MIT;Apache-2.0;BSD-3-Clause;BSD-2-Clause;ISC;CC0-1.0;CC-BY-4.0' || true
+
+  # ============================================
+  # Infrastructure Security
+  # ============================================
+  infra-security:
+    name: Infrastructure Security Scan
+    runs-on: ubuntu-latest
+    if: github.event.inputs.scan_type == 'all' || github.event.inputs.scan_type == ''
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Checkov
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: .
+          quiet: false
+          soft_fail: true
+          framework: kubernetes,dockerfile,github_actions
+          output_format: sarif
+          output_file_path: checkov.sarif
+          skip_check: CKV_DOCKER_2,CKV_DOCKER_3
+
+      - name: Upload Checkov results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: checkov.sarif
+          category: 'checkov'
+
+      - name: Run Terrascan
+        run: |
+          docker run --rm -v "$(pwd):/src" tenable/terrascan:latest scan \
+            -t k8s,dockerfile,github \
+            -f /src \
+            --output json > terrascan-results.json || true
+
+      - name: Upload Terrascan results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: terrascan-results
+          path: terrascan-results.json
+
+  # ============================================
+  # Security Report Summary
+  # ============================================
+  security-summary:
+    name: Security Scan Summary
+    runs-on: ubuntu-latest
+    if: always()
+    needs: 
+      - codeql-analysis
+      - dependency-scan
+      - container-scan
+      - secret-scan
+      - sast-scan
+      - license-scan
+      - infra-security
+    steps:
+      - name: Security Summary
+        run: |
+          echo "🔐 Security Scan Summary"
+          echo "========================"
+          echo "CodeQL Analysis: ${{ needs.codeql-analysis.result }}"
+          echo "Dependency Scan: ${{ needs.dependency-scan.result }}"
+          echo "Container Scan: ${{ needs.container-scan.result }}"
+          echo "Secret Detection: ${{ needs.secret-scan.result }}"
+          echo "SAST Analysis: ${{ needs.sast-scan.result }}"
+          echo "License Check: ${{ needs.license-scan.result }}"
+          echo "Infrastructure Security: ${{ needs.infra-security.result }}"
+          echo ""
+          
+          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
+            echo "⚠️ Security scans detected issues that require attention"
+          else
+            echo "✅ All security scans completed"
+          fi
+
+      - name: Create Security Report
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        continue-on-error: true
+        with:
+          script: |
+            const summary = `## 🔐 Security Scan Results
+            
+            | Scan Type | Status |
+            |-----------|--------|
+            | CodeQL Analysis | ${{ needs.codeql-analysis.result }} |
+            | Dependency Vulnerabilities | ${{ needs.dependency-scan.result }} |
+            | Container Security | ${{ needs.container-scan.result }} |
+            | Secret Detection | ${{ needs.secret-scan.result }} |
+            | SAST Analysis | ${{ needs.sast-scan.result }} |
+            | License Compliance | ${{ needs.license-scan.result }} |
+            | Infrastructure Security | ${{ needs.infra-security.result }} |
+            
+            **Security Status:** ${{ contains(needs.*.result, 'failure') && '⚠️ Issues Detected' || '✅ All Clear' }}
+            
+            📋 View detailed results in the [Security tab](../../security) and workflow artifacts.
+            `;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: summary
+            });

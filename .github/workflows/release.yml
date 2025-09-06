@@ -1,0 +1,586 @@
+name: Release Pipeline
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.2.3)'
+        required: true
+      prerelease:
+        description: 'Mark as pre-release'
+        required: false
+        default: false
+        type: boolean
+      draft:
+        description: 'Create as draft release'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: resumesync
+  GO_VERSION: '1.21'
+  NODE_VERSION: '20'
+
+permissions:
+  contents: write
+  packages: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ============================================
+  # Release Preparation
+  # ============================================
+  prepare-release:
+    name: Prepare Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      is-prerelease: ${{ steps.version.outputs.is-prerelease }}
+      changelog: ${{ steps.changelog.outputs.changelog }}
+      release-notes: ${{ steps.release-notes.outputs.notes }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine version
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            VERSION="${{ github.event.inputs.version }}"
+            IS_PRERELEASE="${{ github.event.inputs.prerelease }}"
+          else
+            VERSION="${{ github.ref_name }}"
+            IS_PRERELEASE="false"
+            
+            # Check if this is a pre-release version
+            if [[ "${VERSION}" =~ (alpha|beta|rc) ]]; then
+              IS_PRERELEASE="true"
+            fi
+          fi
+          
+          # Remove 'v' prefix if present for internal use
+          VERSION_NUMBER=$(echo "${VERSION}" | sed 's/^v//')
+          
+          echo "version=${VERSION_NUMBER}" >> $GITHUB_OUTPUT
+          echo "tag=${VERSION}" >> $GITHUB_OUTPUT
+          echo "is-prerelease=${IS_PRERELEASE}" >> $GITHUB_OUTPUT
+          
+          echo "Release version: ${VERSION}"
+          echo "Pre-release: ${IS_PRERELEASE}"
+
+      - name: Validate version format
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          
+          if ! [[ "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+(\.[0-9]+)?)?$ ]]; then
+            echo "❌ Invalid version format: ${VERSION}"
+            echo "Expected format: X.Y.Z or X.Y.Z-suffix"
+            exit 1
+          fi
+          
+          echo "✅ Version format is valid: ${VERSION}"
+
+      - name: Check if tag already exists
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          
+          if git rev-parse "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "❌ Tag ${TAG} already exists"
+            exit 1
+          fi
+          
+          echo "✅ Tag ${TAG} is available"
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Get the latest tag for comparison
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          
+          if [[ -z "${LATEST_TAG}" ]]; then
+            echo "📝 Generating changelog from initial commit..."
+            COMMITS=$(git log --pretty=format:"- %s (%h)" --reverse)
+          else
+            echo "📝 Generating changelog since ${LATEST_TAG}..."
+            COMMITS=$(git log --pretty=format:"- %s (%h)" "${LATEST_TAG}..HEAD")
+          fi
+          
+          # Create changelog content
+          CHANGELOG=$(cat << EOF
+          ## Changes
+          
+          ${COMMITS}
+          
+          **Full Changelog**: https://github.com/${{ github.repository }}/compare/${LATEST_TAG:-$(git rev-list --max-parents=0 HEAD)}...${{ steps.version.outputs.tag }}
+          EOF
+          )
+          
+          # Save changelog to file and output
+          echo "${CHANGELOG}" > CHANGELOG.md
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          echo "${CHANGELOG}" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Generate release notes
+        id: release-notes
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="${{ steps.version.outputs.tag }}"
+          IS_PRERELEASE="${{ steps.version.outputs.is-prerelease }}"
+          
+          # Create comprehensive release notes
+          RELEASE_NOTES=$(cat << EOF
+          ## 🚀 ResumeSync Pro ${TAG}
+          
+          $(if [[ "${IS_PRERELEASE}" == "true" ]]; then echo "### ⚠️ Pre-release Version"; echo "This is a pre-release version and may contain unstable features."; echo ""; fi)
+          
+          ### 📦 Installation
+          
+          #### Docker Images
+          \`\`\`bash
+          docker pull ghcr.io/${{ github.repository_owner }}/resumesync-api:${TAG}
+          docker pull ghcr.io/${{ github.repository_owner }}/resumesync-worker:${TAG}
+          docker pull ghcr.io/${{ github.repository_owner }}/resumesync-web:${TAG}
+          \`\`\`
+          
+          #### Helm Chart
+          \`\`\`bash
+          helm repo add resumesync https://github.com/${{ github.repository }}/releases/download/${TAG}
+          helm install resumesync resumesync/resumesync --version ${VERSION}
+          \`\`\`
+          
+          #### Kubernetes Manifests
+          \`\`\`bash
+          kubectl apply -f https://github.com/${{ github.repository }}/releases/download/${TAG}/k8s-manifests.yaml
+          \`\`\`
+          
+          ### 🔄 Migration Guide
+          
+          $(if [[ "${VERSION}" =~ ^[2-9]\. ]]; then echo "⚠️ **Breaking Changes**: This is a major version release. Please review the migration guide before upgrading."; echo ""; fi)
+          
+          1. Backup your data before upgrading
+          2. Check compatibility requirements
+          3. Review configuration changes
+          4. Test in staging environment first
+          
+          ### 📋 What's Changed
+          
+          ${{ steps.changelog.outputs.changelog }}
+          
+          ### 🔒 Security
+          
+          - All container images are scanned for vulnerabilities
+          - Dependencies are up to date with security patches
+          - SBOM (Software Bill of Materials) included
+          
+          ### 🐛 Bug Reports
+          
+          Found an issue? Please report it [here](https://github.com/${{ github.repository }}/issues/new?template=bug_report.md).
+          
+          ### 🤝 Contributing
+          
+          We welcome contributions! Please see our [contributing guide](https://github.com/${{ github.repository }}/blob/main/CONTRIBUTING.md).
+          EOF
+          )
+          
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          echo "${RELEASE_NOTES}" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Upload changelog artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: changelog
+          path: CHANGELOG.md
+
+  # ============================================
+  # Build Release Assets
+  # ============================================
+  build-release-assets:
+    name: Build Release Assets
+    runs-on: ubuntu-latest
+    needs: prepare-release
+    strategy:
+      matrix:
+        include:
+          - service: api
+            os: linux
+            arch: amd64
+          - service: api
+            os: linux
+            arch: arm64
+          - service: worker
+            os: linux
+            arch: amd64
+          - service: worker
+            os: linux
+            arch: arm64
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+          CGO_ENABLED: 0
+        working-directory: apps/${{ matrix.service }}
+        run: |
+          # Build binary with version info
+          go build -ldflags="-w -s -X main.Version=${{ needs.prepare-release.outputs.version }} -X main.BuildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ) -X main.GitCommit=${{ github.sha }}" \
+            -o "../release/${{ matrix.service }}-${{ matrix.os }}-${{ matrix.arch }}" \
+            ./cmd/server
+
+      - name: Create archive
+        run: |
+          cd apps/release
+          tar -czf "${{ matrix.service }}-${{ needs.prepare-release.outputs.version }}-${{ matrix.os }}-${{ matrix.arch }}.tar.gz" \
+            "${{ matrix.service }}-${{ matrix.os }}-${{ matrix.arch }}"
+
+      - name: Upload release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.service }}-${{ matrix.os }}-${{ matrix.arch }}
+          path: apps/release/${{ matrix.service }}-${{ needs.prepare-release.outputs.version }}-${{ matrix.os }}-${{ matrix.arch }}.tar.gz
+
+  # ============================================
+  # Build and Push Release Images
+  # ============================================
+  build-release-images:
+    name: Build Release Images
+    runs-on: ubuntu-latest
+    needs: prepare-release
+    strategy:
+      matrix:
+        service: [api, worker, web]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}
+          tags: |
+            type=semver,pattern={{version}},value=${{ needs.prepare-release.outputs.tag }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.prepare-release.outputs.tag }}
+            type=semver,pattern={{major}},value=${{ needs.prepare-release.outputs.tag }}
+            type=raw,value=latest,enable={{is_default_branch}}
+          labels: |
+            org.opencontainers.image.title=ResumeSync ${{ matrix.service }}
+            org.opencontainers.image.description=ResumeSync Pro ${{ matrix.service }} service
+            org.opencontainers.image.vendor=ResumeSync
+            org.opencontainers.image.version=${{ needs.prepare-release.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./apps/${{ matrix.service }}
+          file: ./apps/${{ matrix.service }}/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=release-${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=release-${{ matrix.service }}
+          build-args: |
+            VERSION=${{ needs.prepare-release.outputs.version }}
+            BUILD_TIME=${{ github.event.head_commit.timestamp }}
+            GIT_COMMIT=${{ github.sha }}
+
+      - name: Generate SBOM for release
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}:${{ needs.prepare-release.outputs.version }}
+          format: spdx-json
+          output-file: sbom-${{ matrix.service }}-${{ needs.prepare-release.outputs.version }}.spdx.json
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ matrix.service }}
+          path: sbom-${{ matrix.service }}-${{ needs.prepare-release.outputs.version }}.spdx.json
+
+  # ============================================
+  # Package Release Artifacts
+  # ============================================
+  package-release:
+    name: Package Release Artifacts
+    runs-on: ubuntu-latest
+    needs: [prepare-release, build-release-assets, build-release-images]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts/
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: '3.13.0'
+
+      - name: Package Helm chart
+        run: |
+          # Update chart version
+          sed -i "s/version: .*/version: ${{ needs.prepare-release.outputs.version }}/g" charts/resumesync/Chart.yaml
+          sed -i "s/appVersion: .*/appVersion: ${{ needs.prepare-release.outputs.version }}/g" charts/resumesync/Chart.yaml
+          
+          # Package chart
+          helm package charts/resumesync
+          mv resumesync-${{ needs.prepare-release.outputs.version }}.tgz release-artifacts/
+
+      - name: Generate Kubernetes manifests
+        run: |
+          # Install kustomize
+          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+          sudo mv kustomize /usr/local/bin/
+          
+          # Generate manifests for each environment
+          for env in development staging production; do
+            mkdir -p "k8s/overlays/${env}"
+            
+            # Update image tags in kustomization
+            cd "k8s/overlays/${env}"
+            kustomize edit set image \
+              "ghcr.io/${{ github.repository_owner }}/resumesync-api=ghcr.io/${{ github.repository_owner }}/resumesync-api:${{ needs.prepare-release.outputs.version }}" \
+              "ghcr.io/${{ github.repository_owner }}/resumesync-worker=ghcr.io/${{ github.repository_owner }}/resumesync-worker:${{ needs.prepare-release.outputs.version }}" \
+              "ghcr.io/${{ github.repository_owner }}/resumesync-web=ghcr.io/${{ github.repository_owner }}/resumesync-web:${{ needs.prepare-release.outputs.version }}"
+            
+            # Build manifests
+            kustomize build . > "../../../release-artifacts/k8s-manifests-${env}.yaml"
+            cd ../../..
+          done
+
+      - name: Create release checksums
+        run: |
+          cd release-artifacts
+          find . -type f -name "*.tar.gz" -o -name "*.tgz" -o -name "*.yaml" -o -name "*.json" | \
+          sort | xargs sha256sum > checksums.txt
+
+      - name: Upload packaged release
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-package
+          path: release-artifacts/
+
+  # ============================================
+  # Create GitHub Release
+  # ============================================
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [prepare-release, package-release]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download release package
+        uses: actions/download-artifact@v4
+        with:
+          name: release-package
+          path: release-artifacts/
+
+      - name: Create Git tag
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git tag -a "${{ needs.prepare-release.outputs.tag }}" -m "Release ${{ needs.prepare-release.outputs.tag }}"
+          git push origin "${{ needs.prepare-release.outputs.tag }}"
+
+      - name: Create GitHub Release
+        id: create-release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ needs.prepare-release.outputs.tag }}
+          release_name: ResumeSync Pro ${{ needs.prepare-release.outputs.tag }}
+          body: ${{ needs.prepare-release.outputs.release-notes }}
+          draft: ${{ github.event.inputs.draft || false }}
+          prerelease: ${{ needs.prepare-release.outputs.is-prerelease }}
+
+      - name: Upload release assets
+        run: |
+          UPLOAD_URL="${{ steps.create-release.outputs.upload_url }}"
+          
+          for file in release-artifacts/*.tar.gz release-artifacts/*.tgz release-artifacts/*.yaml release-artifacts/checksums.txt; do
+            if [[ -f "$file" ]]; then
+              filename=$(basename "$file")
+              echo "Uploading $filename..."
+              
+              curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                   -H "Content-Type: application/octet-stream" \
+                   --data-binary @"$file" \
+                   "${UPLOAD_URL%\{*}?name=${filename}"
+            fi
+          done
+
+      - name: Upload SBOM files
+        run: |
+          UPLOAD_URL="${{ steps.create-release.outputs.upload_url }}"
+          
+          for file in release-artifacts/sbom-*/*.spdx.json; do
+            if [[ -f "$file" ]]; then
+              filename=$(basename "$file")
+              echo "Uploading SBOM $filename..."
+              
+              curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                   -H "Content-Type: application/json" \
+                   --data-binary @"$file" \
+                   "${UPLOAD_URL%\{*}?name=${filename}"
+            fi
+          done
+
+  # ============================================
+  # Post-Release Tasks
+  # ============================================
+  post-release:
+    name: Post-Release Tasks
+    runs-on: ubuntu-latest
+    needs: [prepare-release, create-release]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Update version in main branch
+        if: needs.prepare-release.outputs.is-prerelease == 'false'
+        run: |
+          # Update version files
+          echo "${{ needs.prepare-release.outputs.version }}" > VERSION
+          
+          # Update package.json in web app
+          if [[ -f "apps/web/package.json" ]]; then
+            sed -i "s/\"version\": \".*\"/\"version\": \"${{ needs.prepare-release.outputs.version }}\"/g" apps/web/package.json
+          fi
+          
+          # Commit changes
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add VERSION apps/web/package.json
+          git commit -m "chore: bump version to ${{ needs.prepare-release.outputs.version }}" || exit 0
+          git push
+
+      - name: Create release announcement issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const releaseData = {
+              title: `🎉 Release Announcement: ResumeSync Pro ${{ needs.prepare-release.outputs.tag }}`,
+              body: `## 🚀 Release ${{ needs.prepare-release.outputs.tag }} is Now Available!
+              
+              We're excited to announce the release of ResumeSync Pro ${{ needs.prepare-release.outputs.tag }}!
+              
+              ### 📦 What's New
+              
+              ${{ needs.prepare-release.outputs.changelog }}
+              
+              ### 📥 Download & Install
+              
+              **Docker Images:**
+              - \`ghcr.io/${{ github.repository_owner }}/resumesync-api:${{ needs.prepare-release.outputs.tag }}\`
+              - \`ghcr.io/${{ github.repository_owner }}/resumesync-worker:${{ needs.prepare-release.outputs.tag }}\`
+              - \`ghcr.io/${{ github.repository_owner }}/resumesync-web:${{ needs.prepare-release.outputs.tag }}\`
+              
+              **Helm Chart:**
+              \`\`\`bash
+              helm install resumesync oci://ghcr.io/${{ github.repository_owner }}/charts/resumesync --version ${{ needs.prepare-release.outputs.version }}
+              \`\`\`
+              
+              ### 🔗 Links
+              
+              - [Release Page](https://github.com/${{ github.repository }}/releases/tag/${{ needs.prepare-release.outputs.tag }})
+              - [Docker Images](https://github.com/${{ github.repository }}/pkgs/container)
+              - [Documentation](https://github.com/${{ github.repository }}/blob/main/README.md)
+              
+              ### 🤝 Community
+              
+              Thank you to all contributors who made this release possible!
+              
+              Have feedback or found a bug? Please [open an issue](https://github.com/${{ github.repository }}/issues/new/choose).
+              
+              ---
+              *This release was automatically created by GitHub Actions.*`,
+              labels: ['release', 'announcement', 'good first issue']
+            };
+            
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ...releaseData
+            });
+
+  # ============================================
+  # Release Summary
+  # ============================================
+  release-summary:
+    name: Release Summary
+    runs-on: ubuntu-latest
+    if: always()
+    needs:
+      - prepare-release
+      - build-release-assets
+      - build-release-images
+      - package-release
+      - create-release
+      - post-release
+    steps:
+      - name: Release Summary
+        run: |
+          echo "🎉 Release Pipeline Summary"
+          echo "=========================="
+          echo "Version: ${{ needs.prepare-release.outputs.version }}"
+          echo "Tag: ${{ needs.prepare-release.outputs.tag }}"
+          echo "Pre-release: ${{ needs.prepare-release.outputs.is-prerelease }}"
+          echo ""
+          echo "Preparation: ${{ needs.prepare-release.result }}"
+          echo "Build Assets: ${{ needs.build-release-assets.result }}"
+          echo "Build Images: ${{ needs.build-release-images.result }}"
+          echo "Package Release: ${{ needs.package-release.result }}"
+          echo "Create Release: ${{ needs.create-release.result }}"
+          echo "Post-Release: ${{ needs.post-release.result }}"
+          echo ""
+          
+          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
+            echo "❌ Release pipeline failed"
+            exit 1
+          else
+            echo "✅ Release pipeline completed successfully"
+            echo ""
+            echo "🎯 Release ${{ needs.prepare-release.outputs.tag }} is now available!"
+            echo "📦 Docker images: ghcr.io/${{ github.repository_owner }}/resumesync-*:${{ needs.prepare-release.outputs.tag }}"
+            echo "🔗 Release page: https://github.com/${{ github.repository }}/releases/tag/${{ needs.prepare-release.outputs.tag }}"
+          fi
