@@ -28,8 +28,6 @@ on:
 
 permissions:
   contents: read
-  packages: read
-  deployments: write
 
 env:
   REGISTRY: ghcr.io
@@ -669,6 +667,11 @@ jobs:
       - generate-k8s-manifests
       - generate-helm-charts
       - deployment-readiness-tests
+    
+    permissions:
+      contents: read
+      issues: write
+    
     steps:
       - name: Deployment Summary
         run: |
