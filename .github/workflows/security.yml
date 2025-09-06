@@ -18,9 +18,11 @@ on:
         options:
           - all
           - codeql
-          - dependencies
-          - secrets
-          - container
+
+# Concurrency control to prevent multiple security scans
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   GO_VERSION: '1.21'
@@ -123,12 +125,19 @@ jobs:
         working-directory: apps/api
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
-          govulncheck ./... || true
+          govulncheck ./... || {
+            echo "govulncheck detected vulnerabilities in API"
+            exit 1
+          }
 
       - name: Run Go vulnerability check - Worker
         working-directory: apps/worker
         run: |
-          govulncheck ./... || true
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./... || {
+            echo "govulncheck detected vulnerabilities in Worker"
+            exit 1
+          }
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -402,7 +411,8 @@ jobs:
           echo "Infrastructure Security: ${{ needs.infra-security.result }}"
           echo ""
           
-          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
+          # Explicitly check named job results to detect failures
+          if [[ "${{ needs.codeql-analysis.result }}" == "failure" || "${{ needs.dependency-scan.result }}" == "failure" || "${{ needs.container-scan.result }}" == "failure" || "${{ needs.secret-scan.result }}" == "failure" || "${{ needs.sast-scan.result }}" == "failure" || "${{ needs.license-scan.result }}" == "failure" || "${{ needs.infra-security.result }}" == "failure" ]]; then
             echo "⚠️ Security scans detected issues that require attention"
           else
             echo "✅ All security scans completed"
@@ -414,6 +424,17 @@ jobs:
         continue-on-error: true
         with:
           script: |
+            const results = {
+              codeql: "${{ needs.codeql-analysis.result }}",
+              dependency: "${{ needs.dependency-scan.result }}",
+              container: "${{ needs.container-scan.result }}",
+              secret: "${{ needs.secret-scan.result }}",
+              sast: "${{ needs.sast-scan.result }}",
+              license: "${{ needs.license-scan.result }}",
+              infra: "${{ needs.infra-security.result }}",
+            };
+            const hasFailures = Object.values(results).some(r => r === 'failure');
+
             const summary = `## 🔐 Security Scan Results
             
             | Scan Type | Status |
@@ -426,7 +447,7 @@ jobs:
             | License Compliance | ${{ needs.license-scan.result }} |
             | Infrastructure Security | ${{ needs.infra-security.result }} |
             
-            **Security Status:** ${{ contains(needs.*.result, 'failure') && '⚠️ Issues Detected' || '✅ All Clear' }}
+            **Security Status:** ${hasFailures ? '⚠️ Issues Detected' : '✅ All Clear'}
             
             📋 View detailed results in the [Security tab](../../security) and workflow artifacts.
             `;

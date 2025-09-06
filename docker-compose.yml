@@ -95,7 +95,7 @@ services:
           condition: service_healthy
       networks:
         - resumesync-network
-      command: air
+  command: air
 
     # Background Worker
     worker:
@@ -128,7 +128,7 @@ services:
           condition: service_healthy
       networks:
         - resumesync-network
-      command: air
+  command: air
 
     # Next.js Frontend
     web:

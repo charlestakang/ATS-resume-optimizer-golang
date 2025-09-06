@@ -59,10 +59,10 @@
         - ./libs:/libs
         - go_dev_modules:/go/pkg/mod
         - ./apps/api/tmp:/tmp
-      working_dir: /app
-      command: /go/bin/linux_amd64/air -c .air.toml
-      stdin_open: true
-      tty: true
+  working_dir: /app
+  command: air -c .air.toml
+  stdin_open: true
+  tty: true
 
     worker:
       build:
@@ -89,10 +89,10 @@
         - ./libs:/libs
         - go_dev_modules:/go/pkg/mod
         - ./apps/worker/tmp:/tmp
-      working_dir: /app
-      command: /go/bin/linux_amd64/air -c .air.toml
-      stdin_open: true
-      tty: true
+  working_dir: /app
+  command: air -c .air.toml
+  stdin_open: true
+  tty: true
 
     web:
       build:

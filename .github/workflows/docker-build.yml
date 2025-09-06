@@ -221,11 +221,63 @@ jobs:
         run: |
           IMAGE="${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}:${{ needs.prepare-matrix.outputs.image-tag }}"
           
-          # Test image can be pulled and started
-          docker run --rm --platform=${{ matrix.platform }} ${IMAGE} --help || \
-          docker run --rm --platform=${{ matrix.platform }} ${IMAGE} --version || \
-          docker run --rm --platform=${{ matrix.platform }} ${IMAGE} -h || \
-          echo "Image tested successfully for ${{ matrix.service }} on ${{ matrix.platform }}"
+          # Test image can be started and is healthy.
+          check_health() {
+            local url="$1"
+            local name="$2"
+            local max_retries=12
+            local sleep_secs=2
+            local i=0
+            while [ $i -lt $max_retries ]; do
+              status=$(curl -s -o /dev/null -w "%{http_code}" "$url" || true)
+              if [[ "$status" =~ ^2 ]]; then
+                echo "$name healthy (HTTP $status)"
+                return 0
+              fi
+              echo "$name not ready (HTTP $status), retrying..."
+              sleep $sleep_secs
+              i=$((i+1))
+            done
+            return 1
+          }
+
+          case "${{ matrix.service }}" in
+            api)
+              docker run -d --rm --name tmp-${{ matrix.service }} -p 8080:8080 --platform=${{ matrix.platform }} ${IMAGE}
+              if ! check_health "http://localhost:8080/health" "API"; then
+                echo "API failed readiness checks; dumping logs:"
+                docker logs tmp-${{ matrix.service }} || true
+                docker stop tmp-${{ matrix.service }} || true
+                exit 1
+              fi
+              docker stop tmp-${{ matrix.service }} || true
+              ;;
+            web)
+              docker run -d --rm --name tmp-${{ matrix.service }} -p 3000:3000 --platform=${{ matrix.platform }} ${IMAGE}
+              if ! check_health "http://localhost:3000/api/health" "Web"; then
+                echo "Web failed readiness checks; dumping logs:"
+                docker logs tmp-${{ matrix.service }} || true
+                docker stop tmp-${{ matrix.service }} || true
+                exit 1
+              fi
+              docker stop tmp-${{ matrix.service }} || true
+              ;;
+            *)
+              # CLI or background worker: prefer a deterministic command, try --version then --help
+              if docker run --rm --platform=${{ matrix.platform }} ${IMAGE} --version; then
+                echo "${{ matrix.service }} responded to --version"
+              elif docker run --rm --platform=${{ matrix.platform }} ${IMAGE} --help; then
+                echo "${{ matrix.service }} responded to --help"
+              else
+                echo "${{ matrix.service }} did not start/respond to expected commands. Capturing logs..."
+                # Attempt to run detached to capture any logs
+                docker run -d --rm --name tmp-${{ matrix.service }} --platform=${{ matrix.platform }} ${IMAGE} || true
+                docker logs tmp-${{ matrix.service }} || true
+                docker stop tmp-${{ matrix.service }} || true
+                exit 1
+              fi
+              ;;
+          esac
 
   # ============================================
   # Docker Compose Build Test
@@ -256,11 +308,37 @@ jobs:
           # Check service health
           docker-compose ps
           
-          # Test API health endpoint
-          curl -f http://localhost:8080/health || echo "API not ready yet"
-          
-          # Test Web health endpoint  
-          curl -f http://localhost:3000/api/health || echo "Web not ready yet"
+          # Parameterized health checks with retry and HTTP 2xx validation
+          API_HEALTH_URL="${API_HEALTH_URL:-http://localhost:8080/health}"
+          WEB_HEALTH_URL="${WEB_HEALTH_URL:-http://localhost:3000/api/health}"
+          MAX_RETRIES=10
+          SLEEP_SECS=3
+          check_health() {
+            local url="$1"
+            local name="$2"
+            local retries=0
+            while [ $retries -lt $MAX_RETRIES ]; do
+              status=$(curl -s -o /dev/null -w "%{http_code}" "$url" || true)
+              if [[ "$status" =~ ^2 ]]; then
+                echo "$name healthy (HTTP $status)"
+                return 0
+              fi
+              echo "$name not ready (HTTP $status), retrying..."
+              sleep $SLEEP_SECS
+              retries=$((retries+1))
+            done
+            # Fallback: check TCP port
+            host=$(echo "$url" | awk -F[/:] '{print $4}')
+            port=$(echo "$url" | awk -F[/:] '{print $5}')
+            if nc -z "$host" "$port"; then
+              echo "$name TCP port $port is open, but HTTP check failed."
+            else
+              echo "❌ $name not reachable after $MAX_RETRIES attempts."
+              return 1
+            fi
+          }
+          check_health "$API_HEALTH_URL" "API" || exit 1
+          check_health "$WEB_HEALTH_URL" "Web" || exit 1
           
           # Cleanup
           docker-compose down -v
@@ -289,19 +367,24 @@ jobs:
           
           for service in api worker web; do
             IMAGE="${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-${service}:${{ needs.prepare-matrix.outputs.image-tag }}"
-            
+            # Check if image exists locally
+            if ! docker image inspect ${IMAGE} > /dev/null 2>&1; then
+              echo "Image ${IMAGE} not found locally. Attempting to pull from registry..."
+              if ! docker pull ${IMAGE}; then
+                echo "⚠️  Image ${IMAGE} not found locally or in remote registry. Skipping analysis."
+                continue
+              fi
+            fi
             # Get image info
             SIZE=$(docker image inspect ${IMAGE} --format='{{.Size}}' | numfmt --to=iec)
             LAYERS=$(docker image inspect ${IMAGE} --format='{{len .RootFS.Layers}}')
             CREATED=$(docker image inspect ${IMAGE} --format='{{.Created}}')
-            
             echo ""
             echo "🐳 ${service^^} Service:"
             echo "  Size: ${SIZE}"
             echo "  Layers: ${LAYERS}"
             echo "  Created: ${CREATED}"
             echo "  Image: ${IMAGE}"
-            
             # Analyze layers
             docker history ${IMAGE} --no-trunc --format "table {{.CreatedBy}}\t{{.Size}}" | head -10
           done

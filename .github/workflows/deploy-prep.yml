@@ -44,7 +44,7 @@ jobs:
   prepare-deployment:
     name: Prepare Deployment
     runs-on: ubuntu-latest
-    if: github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
     outputs:
       environment: ${{ steps.env-decision.outputs.environment }}
       image-tag: ${{ steps.tag-decision.outputs.image-tag }}
@@ -102,11 +102,24 @@ jobs:
           DEPLOY_READY="true"
           
           # Check if images exist in registry
+
           for service in api worker web; do
             IMAGE="${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-${service}:${{ steps.tag-decision.outputs.image-tag }}"
             echo "Checking if image exists: ${IMAGE}"
-            # Note: In real deployment, you'd check registry API
-            echo "Image check passed for ${service}"
+            # Query Docker Registry HTTP v2 API for manifest
+            REPO="${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-${service}"
+            TAG="${{ steps.tag-decision.outputs.image-tag }}"
+            AUTH_HEADER=""
+            if [ -n "${{ secrets.REGISTRY_USERNAME }}" ] && [ -n "${{ secrets.REGISTRY_PASSWORD }}" ]; then
+              AUTH_HEADER="-u ${{ secrets.REGISTRY_USERNAME }}:${{ secrets.REGISTRY_PASSWORD }}"
+            fi
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" $AUTH_HEADER -H "Accept: application/vnd.docker.distribution.manifest.v2+json" "https://${{ env.REGISTRY }}/v2/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-${service}/manifests/${TAG}")
+            if [ "$STATUS" -eq 200 ]; then
+              echo "Image found for ${service} (HTTP $STATUS)"
+            else
+              echo "Image NOT found for ${service} (HTTP $STATUS)"
+              exit 1
+            fi
           done
           
           # Environment-specific validation
@@ -149,9 +162,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Kustomize
-        run: |
-          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash -s -- ${{ env.KUSTOMIZE_VERSION }}
-          sudo mv kustomize /usr/local/bin/
+        uses: imranismail/setup-kustomize@v1
+        with:
+          kustomize-version: ${{ env.KUSTOMIZE_VERSION }}
 
       - name: Generate base manifests
         run: |
@@ -159,6 +172,11 @@ jobs:
           
           # Generate deployment manifests for each service
           for service in api worker web; do
+            # Compute PORT for each service
+            PORT="8080"
+            if [ "${service}" = "web" ]; then
+              PORT="3000"
+            fi
             cat > k8s/base/${service}-deployment.yaml << EOF
           apiVersion: apps/v1
           kind: Deployment
@@ -183,7 +201,7 @@ jobs:
                 - name: ${service}
                   image: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-${service}:${{ needs.prepare-deployment.outputs.image-tag }}
                   ports:
-                  - containerPort: $([ "${service}" = "api" ] && echo "8080" || [ "${service}" = "web" ] && echo "3000" || echo "8080")
+                  - containerPort: ${PORT}
                   env:
                   - name: ENVIRONMENT
                     value: "${{ needs.prepare-deployment.outputs.environment }}"
@@ -418,7 +436,8 @@ jobs:
           postgresql:
             enabled: true
             auth:
-              postgresPassword: "changeme"
+              # Use a Kubernetes Secret or inject via helm --set-string
+              postgresPassword: "${POSTGRES_PASSWORD}"
               database: "resumesync"
           
           redis:
@@ -429,8 +448,8 @@ jobs:
           minio:
             enabled: true
             auth:
-              rootUser: "minioadmin"
-              rootPassword: "minioadmin123"
+              rootUser: "${MINIO_ROOT_USER}"
+              rootPassword: "${MINIO_ROOT_PASSWORD}"
           
           ingress:
             enabled: false
@@ -605,7 +624,10 @@ jobs:
           for manifest in deployment-artifacts/*.yaml; do
             if [[ -f "$manifest" ]]; then
               echo "Validating $manifest"
-              kubectl apply --dry-run=client -f "$manifest" 2>/dev/null || echo "Validation warning for $manifest"
+              if ! kubectl apply --dry-run=client -f "$manifest"; then
+                echo "Validation warning for $manifest"
+                exit 1
+              fi
             fi
           done
 
@@ -657,7 +679,7 @@ jobs:
           echo "Readiness Tests: ${{ needs.deployment-readiness-tests.result }}"
           echo ""
           
-          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
+          if [[ "${{ needs.prepare-deployment.result }}" == "failure" || "${{ needs.generate-k8s-manifests.result }}" == "failure" || "${{ needs.generate-helm-charts.result }}" == "failure" || "${{ needs.deployment-readiness-tests.result }}" == "failure" ]]; then
             echo "❌ Deployment preparation failed"
             exit 1
           else

@@ -422,7 +422,8 @@ jobs:
     steps:
       - name: Check CI Status
         run: |
-          echo "= CI Pipeline Summary"
+          echo "=
+ CI Pipeline Summary"
           echo "====================="
           echo "Lint Go: ${{ needs.lint-go.result }}"
           echo "Lint JS: ${{ needs.lint-js.result }}"
@@ -433,7 +434,7 @@ jobs:
           echo "Docker Build: ${{ needs.validate-docker-build.result }}"
           
           if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
-            echo "L CI Pipeline failed"
+            echo "CI Pipeline failed"
             exit 1
           else
             echo " CI Pipeline passed"

@@ -1,8 +1,8 @@
 # ResumeSync Pro
 
-[![CI Pipeline](https://github.com/charlestakang/resumesync-pro/actions/workflows/ci.yml/badge.svg)](https://github.com/charlestakang/resumesync-pro/actions/workflows/ci.yml)
-[![Security Scanning](https://github.com/charlestakang/resumesync-pro/actions/workflows/security.yml/badge.svg)](https://github.com/charlestakang/resumesync-pro/actions/workflows/security.yml)
-[![codecov](https://codecov.io/gh/charlestakang/resumesync-pro/graph/badge.svg)](https://codecov.io/gh/charlestakang/resumesync-pro)
+[![CI Pipeline](https://github.com/charlestakang/ATS-resume-optimizer-golang/actions/workflows/ci.yml/badge.svg)](https://github.com/charlestakang/ATS-resume-optimizer-golang/actions/workflows/ci.yml)
+[![Security Scanning](https://github.com/charlestakang/ATS-resume-optimizer-golang/actions/workflows/security.yml/badge.svg)](https://github.com/charlestakang/ATS-resume-optimizer-golang/actions/workflows/security.yml)
+[![codecov](https://codecov.io/gh/charlestakang/ATS-resume-optimizer-golang/graph/badge.svg)](https://codecov.io/gh/charlestakang/ATS-resume-optimizer-golang)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Go Version](https://img.shields.io/badge/go-%3E%3D1.21-blue)](https://go.dev/)
 [![Next.js](https://img.shields.io/badge/Next.js-14+-black)](https://nextjs.org/)
