@@ -2,10 +2,10 @@ name: Docker Build & Push
 
 on:
   push:
-    branches: [ main, develop, release/* ]
+    branches: [ main, dev, develop, release/* ]
     tags: [ 'v*' ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main, dev, develop ]
   workflow_dispatch:
     inputs:
       image_tag:

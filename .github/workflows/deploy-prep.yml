@@ -4,7 +4,7 @@ on:
   workflow_run:
     workflows: ["CI Pipeline", "Docker Build & Push"]
     types: [completed]
-    branches: [ main, develop, release/* ]
+    branches: [ main, dev, develop, release/* ]
   workflow_dispatch:
     inputs:
       environment:
