@@ -155,8 +155,9 @@ jobs:
         with:
           context: ./apps/${{ matrix.service }}
           file: ./apps/${{ matrix.service }}/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ needs.prepare-matrix.outputs.should-push == 'true' && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
           push: ${{ needs.prepare-matrix.outputs.should-push }}
+          load: ${{ needs.prepare-matrix.outputs.should-push != 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.service }}
@@ -170,10 +171,20 @@ jobs:
             GIT_AUTH_TOKEN=${{ secrets.GITHUB_TOKEN }}
           provenance: false
 
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+      - name: Run Trivy vulnerability scanner (push)
+        if: needs.prepare-matrix.outputs.should-push == 'true'
+        uses: aquasecurity/trivy-action@v0
         with:
           image-ref: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}:${{ needs.prepare-matrix.outputs.image-tag }}
+          format: 'sarif'
+          output: 'trivy-${{ matrix.service }}.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Run Trivy vulnerability scanner (pr)
+        if: needs.prepare-matrix.outputs.should-push != 'true'
+        uses: aquasecurity/trivy-action@v0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}:pr-${{ github.event.number }}
           format: 'sarif'
           output: 'trivy-${{ matrix.service }}.sarif'
           severity: 'CRITICAL,HIGH'
@@ -309,14 +320,14 @@ jobs:
           
           # Test services can start
           docker-compose up -d
-          sleep 30
+          sleep 45
           
           # Check service health
           docker-compose ps
           
           # Simple health check for API
           echo "Checking API health..."
-          MAX_RETRIES=10
+          MAX_RETRIES=20
           RETRY_COUNT=0
           while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
             if curl -s -f http://localhost:8080/health > /dev/null 2>&1; then
@@ -324,7 +335,7 @@ jobs:
               break
             fi
             echo "API not ready, retrying... ($RETRY_COUNT/$MAX_RETRIES)"
-            sleep 3
+            sleep 5
             RETRY_COUNT=$((RETRY_COUNT+1))
           done
           
@@ -343,7 +354,7 @@ jobs:
               break
             fi
             echo "Web not ready, retrying... ($RETRY_COUNT/$MAX_RETRIES)"
-            sleep 3
+            sleep 5
             RETRY_COUNT=$((RETRY_COUNT+1))
           done
           
