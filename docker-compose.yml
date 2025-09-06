@@ -95,7 +95,7 @@ services:
           condition: service_healthy
       networks:
         - resumesync-network
-  command: air
+      command: /go/bin/linux_amd64/air -c .air.toml
 
     # Background Worker
     worker:
@@ -128,7 +128,7 @@ services:
           condition: service_healthy
       networks:
         - resumesync-network
-  command: air
+      command: /go/bin/linux_amd64/air -c .air.toml
 
     # Next.js Frontend
     web:
