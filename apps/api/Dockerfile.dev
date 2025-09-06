@@ -44,8 +44,10 @@ ENV GIN_MODE=debug
 EXPOSE 8080
 EXPOSE 2345
 
-# Install Air during build
+# Install Air during build and ensure it's in PATH
 RUN go install github.com/cosmtrek/air@v1.49.0
+# Ensure standard GOPATH bin is on PATH
+ENV PATH="/go/bin:${PATH}"
 
 # Start with hot reload using correct arch path
 CMD ["air", "-c", ".air.toml"]

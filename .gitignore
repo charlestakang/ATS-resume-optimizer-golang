@@ -30,3 +30,19 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+# Next.js build artifacts
+.next/
+out/
+
+# Dependencies
+node_modules/
+
+# Production
+build/
+dist/
+
+# Go/Air temp and logs
+tmp/
+**/tmp/
+**/*.log
+apps/*/logs/
