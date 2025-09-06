@@ -163,6 +163,7 @@ jobs:
             GIT_BRANCH=${{ github.ref_name }}
           secrets: |
             GIT_AUTH_TOKEN=${{ secrets.GITHUB_TOKEN }}
+          provenance: false
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@v0
