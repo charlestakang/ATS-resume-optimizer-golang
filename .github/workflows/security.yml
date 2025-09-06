@@ -238,7 +238,7 @@ jobs:
         continue-on-error: true
 
       - name: Run TruffleHog
-        uses: trufflesecurity/trufflehog@v3
+        uses: trufflesecurity/trufflehog@main
         with:
           path: ./
           base: ${{ github.event.repository.default_branch }}
@@ -267,7 +267,7 @@ jobs:
             apps/worker/go.sum
 
       - name: Run Gosec Security Scanner
-        uses: securego/gosec@v2
+        uses: securego/gosec@master
         with:
           args: '-fmt sarif -out gosec-results.sarif -severity medium ./apps/...'
         continue-on-error: true

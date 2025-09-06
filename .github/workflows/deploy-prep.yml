@@ -26,6 +26,11 @@ on:
         default: false
         type: boolean
 
+permissions:
+  contents: read
+  packages: read
+  deployments: write
+
 env:
   REGISTRY: ghcr.io
   IMAGE_PREFIX: resumesync
