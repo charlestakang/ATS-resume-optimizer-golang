@@ -62,7 +62,8 @@ services:
         - go_dev_modules:/go/pkg/mod
         - ./apps/api/tmp:/tmp
       working_dir: /app
-      command: air -c .air.toml
+      # Temporarily using go run until Air is fixed
+      command: go run cmd/server/main.go
       stdin_open: true
       tty: true
 
@@ -92,7 +93,8 @@ services:
         - go_dev_modules:/go/pkg/mod
         - ./apps/worker/tmp:/tmp
       working_dir: /app
-      command: air -c .air.toml
+      # Temporarily using go run until Air is fixed
+      command: go run cmd/server/main.go
       stdin_open: true
       tty: true
 
