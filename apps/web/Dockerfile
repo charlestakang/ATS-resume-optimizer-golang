@@ -1,26 +1,17 @@
 # Production multi-stage Dockerfile for Next.js
 FROM node:20-alpine AS deps
-# Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed
+# See https://github.com/nodejs/docker-node/blob/main/docs/BestPractices.md
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-# Install pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
-
-# Copy dependency files
-COPY package.json pnpm-lock.yaml* ./
-COPY .npmrc* ./
-
-# Install dependencies with cache mount for faster builds
-RUN --mount=type=cache,target=/root/.pnpm-store \
-    pnpm install --frozen-lockfile --prod=false
+# Use npm (project ships package-lock.json)
+COPY package.json package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --no-audit --prefer-offline
 
 # Stage 2: Build the application
 FROM node:20-alpine AS builder
 WORKDIR /app
-
-# Install pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
 
 # Copy dependencies from deps stage
 COPY --from=deps /app/node_modules ./node_modules
@@ -38,7 +29,7 @@ ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # Build the application
-RUN pnpm build
+RUN npm run build
 
 # Stage 3: Production runner
 FROM node:20-alpine AS runner

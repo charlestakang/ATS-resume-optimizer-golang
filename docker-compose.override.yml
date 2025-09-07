@@ -1,5 +1,7 @@
-  services:
-    postgres:
+version: '3.8'
+
+services:
+  postgres:
       ports:
         - "5432:5432"
       environment:
@@ -11,14 +13,14 @@
         - ./docker/postgres:/docker-entrypoint-initdb.d
       command: postgres -c log_statement=all -c log_destination=stderr
 
-    redis:
+  redis:
       ports:
         - "6379:6379"
       volumes:
         - redis_dev_data:/data
       command: redis-server --appendonly yes --loglevel verbose
 
-    minio:
+  minio:
       ports:
         - "9000:9000"
         - "9001:9001"
@@ -30,7 +32,7 @@
         - minio_dev_data:/data
         - ./docker/minio:/docker-entrypoint-initdb.d
 
-    api:
+  api:
       build:
         context: ./apps/api
         dockerfile: Dockerfile.dev
@@ -60,11 +62,11 @@
         - go_dev_modules:/go/pkg/mod
         - ./apps/api/tmp:/tmp
       working_dir: /app
-      command: /go/bin/linux_amd64/air -c .air.toml
+      command: air -c .air.toml
       stdin_open: true
       tty: true
 
-    worker:
+  worker:
       build:
         context: ./apps/worker
         dockerfile: Dockerfile.dev
@@ -90,11 +92,11 @@
         - go_dev_modules:/go/pkg/mod
         - ./apps/worker/tmp:/tmp
       working_dir: /app
-      command: /go/bin/linux_amd64/air -c .air.toml
+      command: air -c .air.toml
       stdin_open: true
       tty: true
 
-    web:
+  web:
       build:
         context: ./apps/web
         dockerfile: Dockerfile.dev
@@ -121,10 +123,10 @@
       stdin_open: true
       tty: true
 
-  volumes:
-    postgres_dev_data:
-    redis_dev_data:
-    minio_dev_data:
-    go_dev_modules:
-    web_node_modules:
-    web_next_cache:
+volumes:
+  postgres_dev_data:
+  redis_dev_data:
+  minio_dev_data:
+  go_dev_modules:
+  web_node_modules:
+  web_next_cache:

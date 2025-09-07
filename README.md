@@ -1,5 +1,8 @@
-# ATS Resume Optimizer (ResumeSync Pro)
+# ResumeSync Pro
 
+[![CI Pipeline](https://github.com/charlestakang/ATS-resume-optimizer-golang/actions/workflows/ci.yml/badge.svg)](https://github.com/charlestakang/ATS-resume-optimizer-golang/actions/workflows/ci.yml)
+[![Security Scanning](https://github.com/charlestakang/ATS-resume-optimizer-golang/actions/workflows/security.yml/badge.svg)](https://github.com/charlestakang/ATS-resume-optimizer-golang/actions/workflows/security.yml)
+[![codecov](https://codecov.io/gh/charlestakang/ATS-resume-optimizer-golang/graph/badge.svg)](https://codecov.io/gh/charlestakang/ATS-resume-optimizer-golang)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Go Version](https://img.shields.io/badge/go-%3E%3D1.21-blue)](https://go.dev/)
 [![Next.js](https://img.shields.io/badge/Next.js-14+-black)](https://nextjs.org/)
@@ -75,6 +78,7 @@ This project is built as a **Turborepo monorepo** with the following structure:
    # Install Go dependencies
    cd apps/api && go mod download
    cd ../worker && go mod download
+   cd ../../  # Return to root directory
    ```
 
 3. **Set up environment variables**
@@ -95,9 +99,11 @@ This project is built as a **Turborepo monorepo** with the following structure:
    ```bash
    cd apps/api
    go run cmd/migrate/main.go up
-5. **Run database migrations**
-   
-   # Or manually
+   ```
+
+6. **Start the development environment**
+   ```bash
+   # Start all services using Turborepo
    pnpm dev  # Starts all apps in dev mode
    ```
 
